@@ -128,9 +128,9 @@ sub process_text {
         return;
     }
 
-    if ($combined =~ /\b(?:undo|revert)\b/i) {
-        my $n = () = $combined =~ /\b(?:undo|revert)\b/gi;
-        print "KEYWORD: undo/revert x $n\n";
+    if ($combined =~ /\bundo\b/i) {
+        my $n = () = $combined =~ /\bundo\b/gi;
+        print "KEYWORD: undo x $n\n";
         for (1 .. $n) {
             my $wc = pop @word_counts or last;
             send_keys(('C-w') x $wc);

@@ -104,6 +104,7 @@ Say "focus on" or "focus off" at any time to switch.
 | "go go" / "enter" / "execute" | Press Enter |
 | "tab" / "next agent" | Tab key |
 | "backspace" / "delete word" | Delete previous word |
+| "undo" | Undo last words (removes them one by one) |
 | "clear line" / "erase text" | Clear line (Ctrl+U) |
 | "stop stop" | Escape × 3 |
 | punctuation (period, comma, etc.) | Types the symbol |
