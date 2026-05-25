@@ -10,4 +10,5 @@ scripts/
 .cxx/
 *.DS_Store
 app/src/main/assets/vosk-model-*/
-*.log
+__pycache__/
+*.pyc

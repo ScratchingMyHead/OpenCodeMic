@@ -2,27 +2,27 @@
 
 Voice-controlled coding assistant. Speak commands on your Android phone and they appear on your desktop — in your terminal, editor, or anywhere.
 
-> **⚠ Security**: This is a development toy, not a production service. The Android app sends plaintext over HTTP to the Perl server with no authentication or encryption. Anyone on your LAN can send keystrokes to your desktop. Do not expose the Perl server or CDP bridge to the internet or untrusted networks.
+> **⚠ Security**: This is a development toy, not a production service. The Android app sends plaintext over HTTP to the server with no authentication or encryption. Anyone on your LAN can send keystrokes to your desktop. Do not expose the server or CDP bridge to the internet or untrusted networks.
 
 ## Architecture
 
 ```
 Phone (Android)                    Desktop (Linux)
 ┌─────────────────┐    TCP/9876    ┌──────────────────────┐
-│ OpenCodeMic app  │ ───────────→  │ open-mic-server.pl   │
+│ OpenCodeMic app  │ ───────────→  │ open-mic-server.py   │
 │ (Vosk STT)       │               │   ├── xdotool        │
 │ streaming speech │               │   └── cdp_bridge.py  │
 │ → text           │               │       (openCode GUI) │
 └─────────────────┘               └──────────────────────┘
 ```
 
-- **Phone**: captures audio, streams it to a Vosk model for speech-to-text, sends recognized text to the Perl server
-- **Perl server**: receives text, applies keyword mappings (enter, backspace, tab, etc.), sends keystrokes via xdotool or injects text into opencode's GUI via Chrome DevTools Protocol
+- **Phone**: captures audio, streams it to a Vosk model for speech-to-text, sends recognized text to the server
+- **Server**: receives text, applies keyword mappings (enter, backspace, tab, etc.), sends keystrokes via xdotool or injects text into opencode's GUI via Chrome DevTools Protocol
 
 ## Dependencies
 
 - **Android 8+** (API 26) phone
-- **Desktop**: Perl with `JSON::PP` and `HTTP::Server::PSGI`, Python 3, xdotool
+- **Desktop**: Python 3 with `websockets` library, xdotool, wmctrl
 - **Vosk model** (see below)
 
 ## Getting a Vosk Model
@@ -64,10 +64,10 @@ For direct install to a connected device:
 ## Setup
 
 1. **Install the APK** on your Android phone
-2. **Install the Perl server** on your desktop:
+2. **Install dependencies**:
 
    ```bash
-   cpan HTTP::Server::PSGI
+   pip install websockets
    ```
 
 3. **Launch opencode with remote debugging** (required for CDP bridge commands):
@@ -81,7 +81,7 @@ For direct install to a connected device:
 4. **Run the server** on your desktop (must be on the same network):
 
    ```bash
-   perl open-mic-server.pl
+   python3 open-mic-server.py
    ```
 
 5. **Configure the app**: open Settings, enter your desktop's IP address and port 9876, save
@@ -112,4 +112,4 @@ Say "focus on" or "focus off" at any time to switch.
 | "enable automatic execution" | Auto-press Enter after 2s silence |
 | "disable automatic execution" | Turn auto-execution off |
 
-The server lives at `open-mic-server.pl` inside the repo.
+The server lives at `open-mic-server.py` inside the repo.
