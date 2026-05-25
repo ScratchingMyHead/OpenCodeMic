@@ -99,7 +99,7 @@ Say "focus on" or "focus off" at any time to switch.
 
 | Say | Action |
 |-----|--------|
-| "enter" / "go" | Press Enter |
+| "go go" / "enter" / "execute" | Press Enter |
 | "tab" / "next agent" | Tab key |
 | "backspace" / "delete word" | Delete previous word |
 | "clear line" / "erase text" | Clear line (Ctrl+U) |
