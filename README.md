@@ -68,15 +68,23 @@ For direct install to a connected device:
    cpan HTTP::Server::PSGI
    ```
 
-3. **Run the server** on your desktop (must be on the same network):
+3. **Launch opencode with remote debugging** (required for CDP bridge commands):
+
+   ```bash
+   opencode --remote-debugging-port=9222
+   ```
+
+   A wrapper script [`opencode.sh`](opencode.sh) does this automatically.
+
+4. **Run the server** on your desktop (must be on the same network):
 
    ```bash
    perl open-mic-server.pl
    ```
 
-4. **Configure the app**: open Settings, enter your desktop's IP address and port 9876, save
+5. **Configure the app**: open Settings, enter your desktop's IP address and port 9876, save
 
-5. **Tap the mic button** to start. Speak — text appears on your desktop.
+6. **Tap the mic button** to start. Speak — text appears on your desktop.
 
 ## Voice Commands
 
