@@ -62,6 +62,11 @@ class VoskRecognizer {
         }
     }
 
+    /** Reset recognizer state without reloading the model. */
+    fun reset() {
+        try { recognizer?.reset() } catch (e: Exception) { Log.e(TAG, "reset error", e) }
+    }
+
     /** Convenience: feed + finalize + reset (legacy, used during initial transient). */
     fun transcribe(audioData: ShortArray): String {
         acceptWaveform(audioData)

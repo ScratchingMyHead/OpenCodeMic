@@ -52,11 +52,11 @@ class SettingsActivity : AppCompatActivity() {
         passwordInput.setText(prefs.getString("password", ""))
         httpsToggle.isChecked = prefs.getBoolean("use_https", false)
 
-        val savedEnergy = prefs.getInt("energy_threshold", 0)
+        val savedEnergy = prefs.getInt("energy_threshold", 9)
         energySeekBar.progress = savedEnergy.coerceAtMost(100)
         updateEnergyLabel(energyValue, savedEnergy)
 
-        val savedSpeech = prefs.getInt("speech_threshold", 0)
+        val savedSpeech = prefs.getInt("speech_threshold", 11)
         speechSeekBar.progress = savedSpeech.coerceAtMost(100)
         updateSpeechLabel(speechValue, savedSpeech)
 

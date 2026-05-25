@@ -1,2 +1,6 @@
 -keep class org.vosk.** { *; }
 -keep class com.alphacephei.** { *; }
+-keep class com.sun.jna.** { *; }
+-keep class jnr.ffi.** { *; }
+-dontwarn com.sun.jna.**
+-dontwarn jnr.ffi.**

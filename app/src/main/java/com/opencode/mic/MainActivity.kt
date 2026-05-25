@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.content.res.ColorStateList
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -49,10 +50,10 @@ class MainActivity : AppCompatActivity(), MicService.Listener {
         }
 
     private val energyThreshold: Int
-        get() = getSharedPreferences("opencode_mic", MODE_PRIVATE).getInt("energy_threshold", 0)
+        get() = getSharedPreferences("opencode_mic", MODE_PRIVATE).getInt("energy_threshold", 9)
 
     private val speechThreshold: Int
-        get() = getSharedPreferences("opencode_mic", MODE_PRIVATE).getInt("speech_threshold", 0)
+        get() = getSharedPreferences("opencode_mic", MODE_PRIVATE).getInt("speech_threshold", 11)
 
     private val noiseSuppressorEnabled: Boolean
         get() = getSharedPreferences("opencode_mic", MODE_PRIVATE).getBoolean("noise_suppressor_enabled", true)
@@ -73,6 +74,7 @@ class MainActivity : AppCompatActivity(), MicService.Listener {
             if (micService?.isListening() == true) {
                 isListening = true
                 toggleBtn.text = "STOP"
+                toggleBtn.backgroundTintList = ColorStateList.valueOf(0xFF1b5e20.toInt())
             }
         }
 
@@ -99,6 +101,14 @@ class MainActivity : AppCompatActivity(), MicService.Listener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
+        val prefs = getSharedPreferences("opencode_mic", MODE_PRIVATE)
+        if (prefs.getInt("energy_threshold", 9) == 0) {
+            prefs.edit().putInt("energy_threshold", 9).apply()
+        }
+        if (prefs.getInt("speech_threshold", 11) == 0) {
+            prefs.edit().putInt("speech_threshold", 11).apply()
+        }
+
         copyBundledModelIfNeeded()
     }
 
@@ -118,7 +128,11 @@ class MainActivity : AppCompatActivity(), MicService.Listener {
 
     // MicService.Listener
     override fun onTranscript(text: String) {
-        runOnUiThread { transcriptText.append("$text ") }
+        runOnUiThread {
+            transcriptText.append("$text\n")
+            val scrollAmount = transcriptText.layout.getLineTop(transcriptText.lineCount) - transcriptText.height
+            if (scrollAmount > 0) transcriptText.scrollTo(0, scrollAmount)
+        }
     }
 
     override fun onDebug(msg: String) {
@@ -146,6 +160,7 @@ class MainActivity : AppCompatActivity(), MicService.Listener {
         }
         isListening = true
         toggleBtn.text = "STOP"
+        toggleBtn.backgroundTintList = ColorStateList.valueOf(0xFF1b5e20.toInt())
         transcriptText.text = ""
         debugText.text = "Ready\n"
         debug("Starting...")
@@ -155,6 +170,7 @@ class MainActivity : AppCompatActivity(), MicService.Listener {
         micService?.stopListening()
         isListening = false
         toggleBtn.text = "START"
+        toggleBtn.backgroundTintList = ColorStateList.valueOf(0xFF0f3460.toInt())
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -170,6 +186,7 @@ class MainActivity : AppCompatActivity(), MicService.Listener {
             }
             isListening = true
             toggleBtn.text = "STOP"
+            toggleBtn.backgroundTintList = ColorStateList.valueOf(0xFF1b5e20.toInt())
             transcriptText.text = ""
         } else {
             Toast.makeText(this, "Microphone permission required", Toast.LENGTH_LONG).show()

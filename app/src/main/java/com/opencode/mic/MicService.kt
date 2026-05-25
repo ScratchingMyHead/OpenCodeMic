@@ -45,6 +45,7 @@ class MicService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var currentListener: Listener? = null
     private val pendingTranscripts = mutableListOf<String>()
+    private var voskModel: VoskRecognizer? = null
 
     inner class LocalBinder : android.os.Binder() {
         fun getService(): MicService = this@MicService
@@ -87,11 +88,36 @@ class MicService : Service() {
         if (pipelineJob?.isActive == true) return
         pendingTranscripts.clear()
         Log.d(TAG, "startListening host=$hostConfig energyThreshold=$energyThreshold speechThreshold=$speechThreshold nsEnabled=$noiseSuppressorEnabled")
+
+        if (voskModel == null) {
+            val prefs = getSharedPreferences("opencode_mic", MODE_PRIVATE)
+            val modelName = prefs.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
+            val modelDir = File(filesDir, modelName)
+            if (!modelDir.isDirectory) {
+                debug("Model directory missing at ${modelDir.absolutePath}")
+                return
+            }
+            voskModel = VoskRecognizer()
+            try {
+                if (!voskModel!!.init(modelDir.absolutePath)) {
+                    debug("Vosk model init failed: $modelName")
+                    voskModel = null
+                    return
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "init threw", e)
+                voskModel = null
+                return
+            }
+            debug("Vosk model loaded: $modelName")
+        }
+        voskModel?.reset()
+
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OpenCodeMic:mic")
         wakeLock?.acquire()
         startForeground(NOTIFICATION_ID, buildNotification())
-        pipelineJob = serviceScope.launch { runPipeline(hostConfig, energyThreshold, speechThreshold, noiseSuppressorEnabled) }
+        pipelineJob = serviceScope.launch { runPipeline(voskModel!!, hostConfig, energyThreshold, speechThreshold, noiseSuppressorEnabled) }
         heartBeatJob = serviceScope.launch {
             while (isActive) {
                 delay(5000)
@@ -108,26 +134,7 @@ class MicService : Service() {
         heartBeatJob = null
     }
 
-    private suspend fun runPipeline(hostConfig: MicClient.Config, energyThreshold: Int = 0, speechThreshold: Int = 0, noiseSuppressorEnabled: Boolean = true) = coroutineScope {
-        val prefs = getSharedPreferences("opencode_mic", MODE_PRIVATE)
-        val modelName = prefs.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
-        val modelDir = File(filesDir, modelName)
-
-        if (!modelDir.isDirectory) {
-            debug("Model directory missing at ${modelDir.absolutePath}")
-            doCleanup(null)
-            return@coroutineScope
-        }
-
-        val vosk = VoskRecognizer()
-        val modelReady = try { vosk.init(modelDir.absolutePath) } catch (e: Exception) { Log.e(TAG, "init threw", e); false }
-        if (!modelReady) {
-            debug("Vosk model init failed: $modelName")
-            doCleanup(vosk)
-            return@coroutineScope
-        }
-        debug("Vosk model loaded: $modelName")
-
+    private suspend fun runPipeline(vosk: VoskRecognizer, hostConfig: MicClient.Config, energyThreshold: Int = 0, speechThreshold: Int = 0, noiseSuppressorEnabled: Boolean = true) = coroutineScope {
         val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT).coerceAtLeast(SAMPLE_RATE * 2)
         val format = AudioFormat.Builder()
             .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
@@ -146,7 +153,7 @@ class MicService : Service() {
         if (recorder.state != AudioRecord.STATE_INITIALIZED) {
             recorder.release()
             debug("AudioRecord init failed")
-            doCleanup(vosk)
+            cleanupPipeline()
             return@coroutineScope
         }
 
@@ -242,14 +249,11 @@ class MicService : Service() {
             }.join()
         } finally {
             try { noiseSuppressor?.release() } catch (_: Exception) {}
-            doCleanup(vosk)
+            cleanupPipeline()
         }
     }
 
-    private fun doCleanup(vosk: VoskRecognizer?) {
-        try {
-            vosk?.release()
-        } catch (e: Exception) { Log.e(TAG, "release error", e) }
+    private fun cleanupPipeline() {
         try {
             wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
         } catch (e: Exception) { Log.e(TAG, "cleanup error", e) }
@@ -289,6 +293,8 @@ class MicService : Service() {
         Log.d(TAG, "onDestroy")
         pipelineJob?.cancel()
         heartBeatJob?.cancel()
+        voskModel?.release()
+        voskModel = null
         try {
             wakeLock?.let { if (it.isHeld) it.release() }
         } catch (_: Exception) {}
