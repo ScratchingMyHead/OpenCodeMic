@@ -1,6 +1,6 @@
 # OpenCodeMic
 
-Voice-controlled coding assistant. Speak commands on your Android phone and they appear on your desktop — in your terminal, editor, or anywhere.
+Running a speech recognition model on your development machine competes for GPU and CPU with your actual work. This project offloads voice processing to an Android phone — audio never reaches the desktop, only the transcribed text, sent over the LAN to opencode.
 
 > **Security**: The server supports HTTPS with a self-signed cert (`--https`) and optional password auth (`--password`). Without these, traffic is plain HTTP with no authentication. The CDP bridge listens on localhost only. Don't expose the server port to the internet or untrusted networks.
 
