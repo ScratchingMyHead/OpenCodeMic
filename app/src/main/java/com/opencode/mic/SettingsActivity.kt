@@ -35,6 +35,7 @@ class SettingsActivity : AppCompatActivity() {
 
         val hostInput: EditText = findViewById(R.id.hostInput)
         val portInput: EditText = findViewById(R.id.portInput)
+        val passwordInput: EditText = findViewById(R.id.passwordInput)
         val saveBtn: Button = findViewById(R.id.saveBtn)
         val browseBtn: Button = findViewById(R.id.browseModelBtn)
         val energySeekBar: SeekBar = findViewById(R.id.energyThresholdSeekBar)
@@ -42,11 +43,14 @@ class SettingsActivity : AppCompatActivity() {
         val speechSeekBar: SeekBar = findViewById(R.id.speechThresholdSeekBar)
         val speechValue: TextView = findViewById(R.id.speechThresholdValue)
         val nsToggle: SwitchCompat = findViewById(R.id.noiseSuppressorToggle)
+        val httpsToggle: SwitchCompat = findViewById(R.id.httpsToggle)
         val modelGroup: RadioGroup = findViewById(R.id.modelRadioGroup)
 
         val prefs = getSharedPreferences("opencode_mic", MODE_PRIVATE)
         hostInput.setText(prefs.getString("host", "192.168.1.100"))
         portInput.setText(prefs.getInt("port", 9876).toString())
+        passwordInput.setText(prefs.getString("password", ""))
+        httpsToggle.isChecked = prefs.getBoolean("use_https", false)
 
         val savedEnergy = prefs.getInt("energy_threshold", 0)
         energySeekBar.progress = savedEnergy.coerceAtMost(100)
@@ -88,6 +92,8 @@ class SettingsActivity : AppCompatActivity() {
             prefs.edit().apply {
                 putString("host", hostInput.text.toString().trim())
                 putInt("port", portInput.text.toString().trim().toIntOrNull() ?: 9876)
+                putString("password", passwordInput.text.toString())
+                putBoolean("use_https", httpsToggle.isChecked)
                 putInt("energy_threshold", energySeekBar.progress)
                 putInt("speech_threshold", speechSeekBar.progress)
                 putBoolean("noise_suppressor_enabled", nsToggle.isChecked)

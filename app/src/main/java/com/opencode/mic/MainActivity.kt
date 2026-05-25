@@ -42,7 +42,9 @@ class MainActivity : AppCompatActivity(), MicService.Listener {
             val prefs = getSharedPreferences("opencode_mic", MODE_PRIVATE)
             return MicClient.Config(
                 host = prefs.getString("host", "192.168.1.100") ?: "192.168.1.100",
-                port = prefs.getInt("port", 9876)
+                port = prefs.getInt("port", 9876),
+                password = prefs.getString("password", "") ?: "",
+                useHttps = prefs.getBoolean("use_https", false)
             )
         }
 

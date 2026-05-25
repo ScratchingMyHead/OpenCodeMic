@@ -2,14 +2,16 @@
 """
 open-mic-server.py - PC web service for OpenCodeMic
 
-Python replacement for the original Perl server. Listens for POST requests
-from the OpenCodeMic Android app and sends keystrokes to the active window
-and/or the opencode GUI via CDP bridge.
+Listens for POST requests from the OpenCodeMic Android app and sends
+keystrokes to the active window and/or the opencode GUI via CDP bridge.
 
 Usage:
-    python3 open-mic-server.py [port]
+    python3 open-mic-server.py
+    python3 open-mic-server.py --password mysecret
+    python3 open-mic-server.py --password mysecret --https
+    python3 open-mic-server.py --https
 """
-import json, os, re, subprocess, sys, threading
+import argparse, json, os, re, subprocess, sys, threading, ssl
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import cdp_bridge
 
@@ -268,7 +270,17 @@ def process_text(chunk):
 
 
 class Handler(BaseHTTPRequestHandler):
+    password = ''
+
     def do_POST(self):
+        if self.password:
+            auth = self.headers.get('Authorization', '')
+            if auth != f'Bearer {self.password}':
+                self.send_response(401)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': 'unauthorized'}).encode())
+                return
         length = int(self.headers.get('Content-Length', 0))
         raw = self.rfile.read(length).decode()
         if raw:
@@ -288,10 +300,67 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def ensure_cert(cert_path, key_path):
+    """Generate a self-signed cert if missing."""
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        return
+    import shutil
+    if not shutil.which('openssl'):
+        print("WARNING: openssl not found. Generate a certificate manually:")
+        print(f"  openssl req -x509 -newkey rsa:2048 -keyout {key_path} -out {cert_path} -days 365 -nodes -subj /CN=OpenCodeMic")
+        print("Running without HTTPS...", file=sys.stderr)
+        return
+    subprocess.run([
+        'openssl', 'req', '-x509', '-newkey', 'rsa:2048',
+        '-keyout', key_path, '-out', cert_path,
+        '-days', '365', '-nodes',
+        '-subj', '/CN=OpenCodeMic'
+    ], capture_output=True)
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        print(f"Generated self-signed cert: {cert_path}, {key_path}")
+    else:
+        print("WARNING: failed to generate cert. Running without HTTPS...", file=sys.stderr)
+
+
 if __name__ == '__main__':
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 9876
-    server = HTTPServer(('0.0.0.0', port), Handler)
-    print(f"OpenCodeMic server listening on http://0.0.0.0:{port}")
+    parser = argparse.ArgumentParser(description='OpenCodeMic server')
+    parser.add_argument('port', nargs='?', type=int, default=9876, help='Port to listen on')
+    parser.add_argument('--https', action='store_true', help='Enable HTTPS with auto-generated self-signed cert')
+    parser.add_argument('--cert', help='SSL certificate file (default: ~/.config/opencode-mic/cert.pem)')
+    parser.add_argument('--key', help='SSL key file (default: ~/.config/opencode-mic/key.pem)')
+    parser.add_argument('--password', help='Shared secret for client authentication')
+    args = parser.parse_args()
+
+    Handler.password = args.password or ''
+
+    if args.password and not args.https and not (args.cert and args.key):
+        print(f"WARNING: password set without HTTPS — transmitted in plaintext!")
+
+    if args.https:
+        cert_dir = os.path.expanduser('~/.config/opencode-mic')
+        os.makedirs(cert_dir, exist_ok=True)
+        args.cert = args.cert or os.path.join(cert_dir, 'cert.pem')
+        args.key = args.key or os.path.join(cert_dir, 'key.pem')
+
+    if args.cert and args.key:
+        ensure_cert(args.cert, args.key)
+        if os.path.exists(args.cert) and os.path.exists(args.key):
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(args.cert, args.key)
+            server = HTTPServer(('0.0.0.0', args.port), Handler)
+            server.socket = context.wrap_socket(server.socket, server_side=True)
+            proto = 'https'
+            tag = ' + HTTPS' if args.password else ''
+            print(f"Running with HTTPS{tag} on port {args.port}")
+        else:
+            print("WARNING: cert generation failed, falling back to HTTP")
+            server = HTTPServer(('0.0.0.0', args.port), Handler)
+            proto = 'http'
+    else:
+        server = HTTPServer(('0.0.0.0', args.port), Handler)
+        proto = 'http'
+
+    print(f"OpenCodeMic server listening on {proto}://0.0.0.0:{args.port}")
     print(f"Buffer: {BUFFER_FILE}")
     try:
         server.serve_forever()

@@ -2,7 +2,7 @@
 
 Voice-controlled coding assistant. Speak commands on your Android phone and they appear on your desktop — in your terminal, editor, or anywhere.
 
-> **⚠ Security**: This is a development toy, not a production service. The Android app sends plaintext over HTTP to the server with no authentication or encryption. Anyone on your LAN can send keystrokes to your desktop. Do not expose the server or CDP bridge to the internet or untrusted networks.
+> **⚠ Security**: This is a development toy, not a production service. The Android app sends plaintext over HTTP to the server unless HTTPS is configured. Anyone on your LAN can send keystrokes to your desktop. Do not expose the server or CDP bridge to the internet or untrusted networks.
 
 ## Architecture
 
@@ -84,7 +84,18 @@ For direct install to a connected device:
    python3 open-mic-server.py
    ```
 
-5. **Configure the app**: open Settings, enter your desktop's IP address and port 9876, save
+   Options:
+
+   | Flag | Description |
+   |------|-------------|
+   | `--password SECRET` | Require a shared password from the Android app |
+   | `--https` | Enable HTTPS (self-signed cert auto-generated on first run) |
+
+   ```bash
+   python3 open-mic-server.py --password mysecret --https
+   ```
+
+5. **Configure the app**: open Settings, enter your desktop's IP address, port 9876, and optionally the same password. Enable "Use HTTPS" if you started the server with `--https`.
 
 6. **Tap the mic button** to start. Speak — text appears on your desktop.
 
