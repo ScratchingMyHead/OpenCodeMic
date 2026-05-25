@@ -1,0 +1,96 @@
+# OpenCodeMic
+
+Voice-controlled coding assistant. Speak commands on your Android phone and they appear on your desktop — in your terminal, editor, or anywhere.
+
+## Architecture
+
+```
+Phone (Android)                    Desktop (Linux)
+┌─────────────────┐    TCP/9876    ┌──────────────────────┐
+│ OpenCodeMic app  │ ───────────→  │ open-mic-server.pl   │
+│ (Vosk STT)       │               │   ├── xdotool        │
+│ streaming speech │               │   └── cdp_bridge.py  │
+│ → text           │               │       (openCode GUI) │
+└─────────────────┘               └──────────────────────┘
+```
+
+- **Phone**: captures audio, streams it to a Vosk model for speech-to-text, sends recognized text to the Perl server
+- **Perl server**: receives text, applies keyword mappings (enter, backspace, tab, etc.), sends keystrokes via xdotool or injects text into opencode's GUI via Chrome DevTools Protocol
+
+## Dependencies
+
+- **Android 8+** (API 26) phone
+- **Desktop**: Perl with `JSON::PP` and `HTTP::Server::PSGI`, Python 3, xdotool
+- **Vosk model** (see below)
+
+## Getting a Vosk Model
+
+Vosk provides models at https://alphacephei.com/vosk/models
+
+Download one of these:
+
+| Model | Size | Accuracy | Notes |
+|-------|------|----------|-------|
+| `vosk-model-small-en-us-0.15` | ~40 MB | Low | Bundled fallback |
+| `vosk-model-en-us-0.22` | ~2.6 GB | High | Recommended |
+
+### Installing the Model
+
+1. Download the model to your phone (e.g., via browser, USB transfer, or `adb push`)
+2. Open the OpenCodeMic app
+3. Tap **Settings** (gear icon)
+4. Tap **Browse for Model** and navigate to the extracted model directory
+5. The app copies it to internal storage and makes it available in the model list
+6. Select the model and tap **Save**
+
+Alternatively, you can use the included small model (`vosk-model-small-en-us-0.15`) without downloading anything — it's bundled with the app as a fallback.
+
+## Building
+
+```bash
+git clone https://github.com/ScratchingMyHead/OpenCodeMic.git
+cd OpenCodeMic
+./gradlew assembleDebug
+```
+
+For direct install to a connected device:
+
+```bash
+./gradlew installDebug
+```
+
+## Setup
+
+1. **Install the APK** on your Android phone
+2. **Install the Perl server** on your desktop:
+
+   ```bash
+   cpan HTTP::Server::PSGI
+   ```
+
+3. **Run the server** on your desktop (must be on the same network):
+
+   ```bash
+   perl open-mic-server.pl
+   ```
+
+4. **Configure the app**: open Settings, enter your desktop's IP address and port 9876, save
+
+5. **Tap the mic button** to start. Speak — text appears on your desktop.
+
+## Voice Commands
+
+| Say | Action |
+|-----|--------|
+| "enter" / "go" | Press Enter |
+| "tab" / "next agent" | Tab key |
+| "backspace" / "delete word" | Delete previous word |
+| "clear line" / "erase text" | Clear line (Ctrl+U) |
+| "stop stop" | Escape × 3 |
+| punctuation (period, comma, etc.) | Types the symbol |
+| "focus on" | Send keystrokes to opencode GUI only |
+| "focus off" | Send keystrokes to active window (xdotool) |
+| "enable automatic execution" | Auto-press Enter after 2s silence |
+| "disable automatic execution" | Turn auto-execution off |
+
+The server lives at `open-mic-server.pl` inside the repo.

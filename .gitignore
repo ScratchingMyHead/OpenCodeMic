@@ -9,4 +9,5 @@ app/build/
 scripts/
 .cxx/
 *.DS_Store
+app/src/main/assets/vosk-model-*/
 *.log
