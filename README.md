@@ -86,6 +86,15 @@ For direct install to a connected device:
 
 6. **Tap the mic button** to start. Speak — text appears on your desktop.
 
+## Focus Mode
+
+The server has two modes for where keystrokes are sent:
+
+- **"focus on"** (default) — sends text and key commands **only to the opencode GUI** via the Chrome DevTools Protocol bridge (`cdp_bridge.py`). Requires opencode to be launched with `--remote-debugging-port=9222`. Key combos (tab, backspace, clear line, stop) are sent to opencode only.
+- **"focus off"** — sends text and key commands to **whatever window is currently active** via xdotool. Tab, backspace, and other combos are skipped. Works with any application.
+
+Say "focus on" or "focus off" at any time to switch.
+
 ## Voice Commands
 
 | Say | Action |
@@ -96,8 +105,7 @@ For direct install to a connected device:
 | "clear line" / "erase text" | Clear line (Ctrl+U) |
 | "stop stop" | Escape × 3 |
 | punctuation (period, comma, etc.) | Types the symbol |
-| "focus on" | Send keystrokes to opencode GUI only |
-| "focus off" | Send keystrokes to active window (xdotool) |
+| "focus on" / "focus off" | Switch between opencode GUI and active window (see above) |
 | "enable automatic execution" | Auto-press Enter after 2s silence |
 | "disable automatic execution" | Turn auto-execution off |
 
