@@ -1,5 +1,7 @@
 # OpenCodeMic
 
+[![Build](https://github.com/ScratchingMyHead/OpenCodeMic/actions/workflows/build.yml/badge.svg)](https://github.com/ScratchingMyHead/OpenCodeMic/actions/workflows/build.yml)
+
 Running a speech recognition model on your development machine competes for GPU and CPU with your actual work. This project offloads voice processing to an Android phone — audio never reaches the desktop, only the transcribed text, sent over the LAN to opencode.
 
 > **Security**: The server supports HTTPS with a self-signed cert (`--https`) and optional password auth (`--password`). Without these, traffic is plain HTTP with no authentication. The CDP bridge listens on localhost only. Don't expose the server port to the internet or untrusted networks.
