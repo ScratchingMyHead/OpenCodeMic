@@ -2,6 +2,8 @@
 
 Voice-controlled coding assistant. Speak commands on your Android phone and they appear on your desktop — in your terminal, editor, or anywhere.
 
+> **⚠ Security**: This is a development toy, not a production service. The Android app sends plaintext over HTTP to the Perl server with no authentication or encryption. Anyone on your LAN can send keystrokes to your desktop. Do not expose the Perl server or CDP bridge to the internet or untrusted networks.
+
 ## Architecture
 
 ```
