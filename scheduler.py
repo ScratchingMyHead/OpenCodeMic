@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
 Scheduler for opencode — reads tasks from schedule.txt and fires them
-via `opencode run --attach` to the desktop backend. Each task runs in its
-own isolated session titled "scheduler", visible in the GUI sidebar.
+via `opencode run --attach` to a headless opencode server running in tmux.
+Each task runs in its own session titled "scheduler".
+
+The headless server is started automatically in a tmux session named
+"opencode-scheduler" if not already running.
 """
 import json
 import os
@@ -16,7 +19,11 @@ from datetime import datetime, timedelta
 SCHEDULE_FILE = '/home/rj/su/schedule.txt'
 IDLE_THRESHOLD = 300        # minimum idle seconds for low-priority tasks
 CHECK_INTERVAL = 60         # how often we poll the schedule
-BACKEND_URL = 'http://127.0.0.1:38023'
+
+SERVER_PORT = 15110
+SERVER_PASSWORD = 'scheduler123'
+SERVER_TMUX = 'opencode-scheduler'
+BACKEND_URL = f'http://127.0.0.1:{SERVER_PORT}'
 
 # Map human-readable model names → provider/modelID for --model flag
 MODEL_MAP = {
@@ -25,7 +32,64 @@ MODEL_MAP = {
     'big pickle':            'opencode/big-pickle',
     'llama':                 'llama/Qwen3.6-35B-A3B-UD-Q4_K_M',
     'qwen':                  'llama/Qwen3.6-35B-A3B-UD-Q4_K_M',
+    'big pickle free':       'opencode/big-pickle-free',
 }
+
+
+def _server_pid():
+    """Return PID of the scheduler server if running, else None."""
+    try:
+        r = subprocess.run(
+            ['tmux', 'list-panes', '-t', SERVER_TMUX, '-F', '#{pane_pid}'],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return int(r.stdout.strip().split('\n')[0])
+    except (ValueError, OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def ensure_server():
+    """Start the headless opencode server in tmux if not already running."""
+    pid = _server_pid()
+    if pid is not None:
+        # Verify it's actually responding
+        try:
+            r = subprocess.run(
+                ['curl', '-so', '/dev/null', '-w', '%{http_code}',
+                 f'http://127.0.0.1:{SERVER_PORT}/'],
+                capture_output=True, text=True, timeout=5,
+            )
+            if r.stdout.strip() in ('401', '200'):
+                return True
+        except OSError:
+            pass
+        print("scheduler: server process exists but not responding, restarting")
+        subprocess.run(['tmux', 'kill-session', '-t', SERVER_TMUX],
+                       capture_output=True, timeout=5)
+
+    print(f"scheduler: starting server on port {SERVER_PORT}")
+    subprocess.run(['tmux', 'new-session', '-d', '-s', SERVER_TMUX],
+                   capture_output=True, timeout=5)
+    # Build and send the serve command with a known password
+    cmd = f'cd /home/rj/su && OPENCODE_SERVER_PASSWORD={SERVER_PASSWORD} opencode serve --port {SERVER_PORT} --hostname 127.0.0.1'
+    subprocess.run(['tmux', 'send-keys', '-t', SERVER_TMUX, cmd, 'Enter'],
+                   capture_output=True, timeout=5)
+    time.sleep(5)
+
+    # Verify
+    try:
+        r = subprocess.run(
+            ['curl', '-so', '/dev/null', '-w', '%{http_code}',
+             f'http://127.0.0.1:{SERVER_PORT}/'],
+            capture_output=True, text=True, timeout=5,
+        )
+        alive = r.stdout.strip() in ('401', '200')
+        print(f"scheduler: server {'running' if alive else 'failed to start'}")
+        return alive
+    except OSError:
+        return False
 
 
 def read_schedule():
@@ -83,7 +147,8 @@ def get_last_scheduler_session():
     """Return the session ID of the most recent 'scheduler' session, or None."""
     try:
         result = subprocess.run(
-            ['opencode', 'session', 'list', '--format', 'json'],
+            ['opencode', 'session', 'list', '--attach', BACKEND_URL,
+             '-p', SERVER_PASSWORD, '-u', 'opencode', '--format', 'json'],
             capture_output=True, text=True, timeout=15,
         )
         if result.returncode != 0:
@@ -98,10 +163,12 @@ def get_last_scheduler_session():
 
 
 def clean_old_scheduler_sessions(keep_id=None):
-    """Delete all 'scheduler' sessions except the one to keep."""
+    """Delete all 'scheduler' sessions on the headless server except the one to keep."""
     try:
+        # session list --attach doesn't work, so list locally and delete via attach
         result = subprocess.run(
-            ['opencode', 'session', 'list', '--format', 'json'],
+            ['opencode', 'session', 'list', '--attach', BACKEND_URL,
+             '-p', SERVER_PASSWORD, '-u', 'opencode', '--format', 'json'],
             capture_output=True, text=True, timeout=15,
         )
         if result.returncode != 0:
@@ -111,23 +178,30 @@ def clean_old_scheduler_sessions(keep_id=None):
             if s.get('title') == 'scheduler' and s.get('id') != keep_id:
                 sid = s['id']
                 subprocess.run(
-                    ['opencode', 'session', 'delete', sid],
+                    ['opencode', 'session', 'delete', '--attach', BACKEND_URL,
+                     '-p', SERVER_PASSWORD, '-u', 'opencode', sid],
                     capture_output=True, timeout=15,
                 )
-                print(f"  scheduler: deleted old session {sid[:20]}…")
+                print(f"  scheduler: deleted old session {sid[:25]}…")
     except (json.JSONDecodeError, subprocess.TimeoutExpired, OSError) as e:
         print(f"  scheduler: cleanup error: {e}")
 
 
 def execute_task(model, agent, message):
     """
-    Run `opencode run --attach` to execute the task. Reuses the existing
-    'scheduler' session if one exists; creates a new one otherwise.
-    Returns True on success (process exited 0), False otherwise.
+    Run `opencode run --attach` to execute the task on the headless server.
+    Reuses the existing 'scheduler' session if one exists; creates a new one otherwise.
+    Returns True on success, False otherwise.
     """
+    if not ensure_server():
+        print(f"  scheduler: cannot start server, skipping task")
+        return False
+
     cmd = [
         'opencode', 'run',
         '--attach', BACKEND_URL,
+        '-p', SERVER_PASSWORD,
+        '-u', 'opencode',
         '--dir', '/home/rj/su',
     ]
 
@@ -135,7 +209,7 @@ def execute_task(model, agent, message):
     existing_id = get_last_scheduler_session()
     if existing_id:
         cmd.extend(['--continue', '--session', existing_id])
-        print(f"  scheduler: reusing session {existing_id[:20]}…")
+        print(f"  scheduler: reusing session {existing_id[:25]}…")
     else:
         cmd.extend(['--title', 'scheduler'])
         print(f"  scheduler: creating new scheduler session")
@@ -151,7 +225,7 @@ def execute_task(model, agent, message):
     cmd.append(message)
 
     cmd_str = ' '.join(shlex.quote(c) for c in cmd)
-    print(f"  scheduler: running — {cmd_str[:200]}")
+    print(f"  scheduler: running — {cmd_str[:250]}")
     try:
         result = subprocess.run(
             cmd,
@@ -161,18 +235,18 @@ def execute_task(model, agent, message):
         )
         if result.returncode == 0:
             print(f"  scheduler: task completed (exit 0)")
-            # Print last line of stdout for confirmation
             last_line = result.stdout.strip().split('\n')[-1] if result.stdout.strip() else ''
             if last_line:
                 print(f"  scheduler: last output: {last_line[:200]}")
 
             # Clean up old scheduler sessions (keep the one we just used)
-            new_id = get_last_scheduler_session()
-            clean_old_scheduler_sessions(keep_id=new_id)
+            # Get the session ID from the continued/created session
+            used_id = get_last_scheduler_session()
+            clean_old_scheduler_sessions(keep_id=used_id)
             return True
         else:
             print(f"  scheduler: task failed (exit {result.returncode})")
-            stderr_snippet = result.stderr.strip()[:300] if result.stderr else ''
+            stderr_snippet = result.stderr.strip()[:400] if result.stderr else ''
             if stderr_snippet:
                 print(f"  scheduler: stderr: {stderr_snippet}")
             return False
@@ -194,6 +268,8 @@ def scheduler_loop(logger=None):
     has been idle for IDLE_THRESHOLD seconds.
     """
     print("scheduler: started")
+    # Ensure the headless server is running at startup
+    ensure_server()
     while True:
         try:
             tasks = read_schedule()
