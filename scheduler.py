@@ -147,8 +147,7 @@ def get_last_scheduler_session():
     """Return the session ID of the most recent 'scheduler' session, or None."""
     try:
         result = subprocess.run(
-            ['opencode', 'session', 'list', '--attach', BACKEND_URL,
-             '-p', SERVER_PASSWORD, '-u', 'opencode', '--format', 'json'],
+            ['opencode', 'session', 'list', '--format', 'json'],
             capture_output=True, text=True, timeout=15,
         )
         if result.returncode != 0:
@@ -163,12 +162,10 @@ def get_last_scheduler_session():
 
 
 def clean_old_scheduler_sessions(keep_id=None):
-    """Delete all 'scheduler' sessions on the headless server except the one to keep."""
+    """Delete all 'scheduler' sessions except the one to keep."""
     try:
-        # session list --attach doesn't work, so list locally and delete via attach
         result = subprocess.run(
-            ['opencode', 'session', 'list', '--attach', BACKEND_URL,
-             '-p', SERVER_PASSWORD, '-u', 'opencode', '--format', 'json'],
+            ['opencode', 'session', 'list', '--format', 'json'],
             capture_output=True, text=True, timeout=15,
         )
         if result.returncode != 0:
@@ -178,8 +175,7 @@ def clean_old_scheduler_sessions(keep_id=None):
             if s.get('title') == 'scheduler' and s.get('id') != keep_id:
                 sid = s['id']
                 subprocess.run(
-                    ['opencode', 'session', 'delete', '--attach', BACKEND_URL,
-                     '-p', SERVER_PASSWORD, '-u', 'opencode', sid],
+                    ['opencode', 'session', 'delete', sid],
                     capture_output=True, timeout=15,
                 )
                 print(f"  scheduler: deleted old session {sid[:25]}…")
