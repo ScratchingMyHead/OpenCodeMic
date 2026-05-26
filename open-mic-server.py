@@ -241,11 +241,13 @@ def process_text(chunk):
         state.last_sent = ''
         return
 
-    if re.search(r'\bstart\W*opencode\b', combined, re.IGNORECASE):
+    if re.search(r'\bstart\W*open\W*code\b', combined, re.IGNORECASE):
         print("KEYWORD: start opencode -> launching GUI")
         subprocess.Popen(
             ['/home/rj/su/opencode.sh'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
         )
         clear_buffer()
         state.last_sent = ''
