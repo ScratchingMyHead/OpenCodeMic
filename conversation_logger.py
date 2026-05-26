@@ -56,7 +56,7 @@ class ConversationLogger:
     def __init__(self):
         self.last_hash = None
         self.last_turn_count = 0
-        self.last_output_time = None
+        self.last_output_time = datetime.now()
         self.last_streaming = False
         self.current_agent = None
         self.current_text = ""
