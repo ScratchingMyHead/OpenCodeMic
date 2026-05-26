@@ -280,6 +280,8 @@ def scheduler_loop(logger=None):
                        for dt, prio, model, agent, msg in tasks if now < dt]
 
             if expired:
+                processed = []
+                retries = []
                 for dt, prio, model, agent, msg in expired:
                     should_fire = (prio == 'high')
 
@@ -292,10 +294,10 @@ def scheduler_loop(logger=None):
                     if should_fire:
                         if execute_task(model, agent, msg):
                             print(f"  scheduler: task executed OK")
+                            processed.append((dt, prio, model, agent, msg))
                         else:
-                            # Re-schedule for 5 minutes later on failure
                             retry_dt = now + timedelta(minutes=5)
-                            pending.append((retry_dt, prio, model, agent, msg))
+                            retries.append((retry_dt, prio, model, agent, msg))
                             print(f"  scheduler: will retry at {retry_dt.strftime('%H:%M')}")
                     else:
                         new_dt = (now + timedelta(seconds=IDLE_THRESHOLD)).replace(second=0, microsecond=0)
@@ -303,7 +305,12 @@ def scheduler_loop(logger=None):
                         status = f"idle {idle_s:.0f}s" if idle_s is not None else "no idle info"
                         print(f"  scheduler: busy ({status}), rescheduled to {new_dt.strftime('%H:%M')}")
 
-                write_schedule(pending)
+                # Re-read the file to capture any lines the agent may have added,
+                # then remove the ones we processed and add retries
+                current = read_schedule()
+                current = [t for t in current if t not in processed]
+                current.extend(retries)
+                write_schedule(current)
         except Exception as e:
             print(f"scheduler: error: {e}")
 
