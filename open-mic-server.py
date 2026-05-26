@@ -62,21 +62,27 @@ def send_cdp_keys(*keys):
     if not state.focus_mode:
         return
     key_str = ','.join(keys)
-    if key_str == 'Escape':
-        cdp_bridge.do_escape(3)
-    elif key_str == 'Enter':
-        cdp_bridge.do_enter()
-    elif key_str == 'Tab':
-        cdp_bridge.do_tab()
-    elif key_str == 'C-w':
-        cdp_bridge.do_delete_word()
-    elif key_str == 'C-u':
-        cdp_bridge.do_clear_line()
+    try:
+        if key_str == 'Escape':
+            cdp_bridge.do_escape(3)
+        elif key_str == 'Enter':
+            cdp_bridge.do_enter()
+        elif key_str == 'Tab':
+            cdp_bridge.do_tab()
+        elif key_str == 'C-w':
+            cdp_bridge.do_delete_word()
+        elif key_str == 'C-u':
+            cdp_bridge.do_clear_line()
+    except Exception as e:
+        print(f"CDP ERROR: {e} — is the opencode GUI running?")
 
 
 def send_text(text):
     if state.focus_mode:
-        cdp_bridge.do_type_text(text)
+        try:
+            cdp_bridge.do_type_text(text)
+        except Exception as e:
+            print(f"CDP ERROR: {e} — is the opencode GUI running?")
     else:
         subprocess.run(['xdotool', 'type', text])
 
