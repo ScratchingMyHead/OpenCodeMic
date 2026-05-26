@@ -14,6 +14,8 @@ Usage:
 import argparse, json, os, re, subprocess, sys, threading, ssl
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import cdp_bridge
+import scheduler
+import conversation_logger
 
 BUFFER_FILE = '/tmp/opencode_mic_buffer.txt'
 
@@ -102,11 +104,33 @@ def do_auto_enter():
         subprocess.run(['xdotool', 'key', 'Enter'])
 
 
+BEEP_FILE = '/home/rj/su/computerbeep_69.mp3'
+
+
 def process_text(chunk):
     chunk = re.sub(r'\[.+?\]', '', chunk)
     chunk = chunk.strip()
     if not chunk:
         return
+
+    # "computer" prefix — play beep; if just "computer" alone, drop it
+    if chunk.lower().startswith('computer'):
+        try:
+            subprocess.Popen(
+                ['mpg123', '-q', BEEP_FILE],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        except FileNotFoundError:
+            try:
+                subprocess.Popen(
+                    ['ffplay', '-nodisp', '-autoexit', '-loglevel', 'quiet', BEEP_FILE],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+            except FileNotFoundError:
+                print("WARNING: no mpg123 or ffplay found for beep")
+        # If chunk is exactly "computer" (or "computer "), drop it
+        if chunk.lower().strip() == 'computer':
+            return
 
     buffer = read_buffer()
     combined = (buffer + " " + chunk).strip()
@@ -360,6 +384,13 @@ if __name__ == '__main__':
         server = HTTPServer(('0.0.0.0', args.port), Handler)
         proto = 'http'
 
+    logger = conversation_logger.ConversationLogger()
+    logger_thread = threading.Thread(
+        target=conversation_logger.poll_loop, args=(logger,),
+        daemon=True, name='logger'
+    )
+    logger_thread.start()
+    scheduler.start(logger)
     print(f"OpenCodeMic server listening on {proto}://0.0.0.0:{args.port}")
     print(f"Buffer: {BUFFER_FILE}")
     try:

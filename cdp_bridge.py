@@ -45,8 +45,9 @@ async def send_cmd(ws, method, params=None):
     return json.loads(resp)
 
 
-async def eval_js(ws, js):
-    r = await send_cmd(ws, "Runtime.evaluate", {"expression": js, "returnByValue": True})
+async def eval_js(ws, js, await_promise=False):
+    params = {"expression": js, "returnByValue": True, "awaitPromise": await_promise}
+    r = await send_cmd(ws, "Runtime.evaluate", params)
     return r.get("result", {}).get("result", {}).get("value")
 
 
@@ -128,6 +129,10 @@ async def _run_cdp(command, text=None, count=1):
             return await dispatch_key(ws, ".", "Period", 190, ctrl=True)
         elif command == "agent_prev":
             return await dispatch_key(ws, ".", "Period", 190, ctrl=True, shift=True)
+        elif command == "eval":
+            return await eval_js(ws, text)
+        elif command == "eval_async":
+            return await eval_js(ws, text, await_promise=True)
 
 
 def do_type_text(text):
@@ -164,6 +169,14 @@ def do_agent_next():
 
 def do_agent_prev():
     return asyncio.run(_run_cdp("agent_prev"))
+
+
+def do_eval_js(js):
+    return asyncio.run(_run_cdp("eval", text=js))
+
+
+def do_eval_js_async(js):
+    return asyncio.run(_run_cdp("eval_async", text=js))
 
 
 async def run_command(args):
@@ -208,6 +221,12 @@ async def run_command(args):
 
         elif args.command == "agent_prev":
             return await dispatch_key(ws, ".", "Period", 190, ctrl=True, shift=True)
+
+        elif args.command == "eval":
+            return await eval_js(ws, args.js)
+
+        elif args.command == "eval_async":
+            return await eval_js(ws, args.js, await_promise=True)
 
         elif args.command == "stdin":
             for line in sys.stdin:
@@ -268,6 +287,12 @@ async def main():
     sub.add_parser("stdin", help="Read commands from stdin")
     sub.add_parser("agent_next", help="Cycle to next agent (Ctrl+.)")
     sub.add_parser("agent_prev", help="Cycle to previous agent (Shift+Ctrl+.)")
+
+    p = sub.add_parser("eval", help="Evaluate JavaScript in the renderer")
+    p.add_argument("js", help="JavaScript expression to evaluate")
+
+    p = sub.add_parser("eval_async", help="Evaluate async JavaScript (awaits Promise)")
+    p.add_argument("js", help="JavaScript expression returning a Promise")
 
     args = parser.parse_args()
     result = await run_command(args)

@@ -185,7 +185,6 @@ class MicService : Service() {
                 var silenceReads = 0
                 var speechSinceLastFlush = false
                 var skipFeed = 0
-                var lastSentText = ""
                 var samplesFed = 0L
 
                 while (isActive) {
@@ -222,11 +221,10 @@ class MicService : Service() {
 
                         if (shouldFlush) {
                             val text = vosk.getFinalText()
-                            if (text.isNotBlank() && text != lastSentText) {
+                            if (text.isNotBlank()) {
                                 if (text.split(Regex("\\s+")).size < 3) {
                                     Log.d(TAG, "DEBUG_SHORT: \"$text\" samplesFed=$samplesFed speechThreshold=$threshold energyThreshold=${"%.1f".format(energyThreshold / 10.0)}%")
                                 }
-                                lastSentText = text
                                 pendingTranscripts.add(text)
                                 currentListener?.onTranscript(text)
                                 Log.d(TAG, "TX: $text")
