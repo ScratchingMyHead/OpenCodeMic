@@ -93,13 +93,21 @@ def ensure_server():
 
 
 def read_schedule():
-    """Return list of (datetime, priority, model, agent, message) tuples."""
-    if not os.path.exists(SCHEDULE_FILE):
-        return []
+    """
+    Return (tasks, lines, task_indices) where:
+      tasks = list of (datetime, priority, model, agent, message) tuples
+      lines = raw lines from the file (including comments/blanks)
+      task_indices = set of line indices in `lines` that correspond to tasks
+    """
     tasks = []
+    lines = []
+    task_indices = set()
+    if not os.path.exists(SCHEDULE_FILE):
+        return tasks, lines, task_indices
     with open(SCHEDULE_FILE) as f:
-        for line in f:
-            line = line.strip()
+        for i, raw_line in enumerate(f):
+            lines.append(raw_line)
+            line = raw_line.strip()
             if not line or line.startswith('#'):
                 continue
             parts = line.split('|', 5)
@@ -117,19 +125,8 @@ def read_schedule():
             except ValueError:
                 continue
             tasks.append((dt, priority, model, agent, message))
-    return tasks
-
-
-def write_schedule(tasks):
-    lines = []
-    for dt, prio, model, agent, msg in tasks:
-        fields = [dt.strftime('%Y/%m/%d %H:%M'), prio, model, agent, msg]
-        lines.append(' | '.join(fields))
-    with open(SCHEDULE_FILE, 'w') as f:
-        if lines:
-            f.write('\n'.join(lines) + '\n')
-        else:
-            f.write('')
+            task_indices.add(i)
+    return tasks, lines, task_indices
 
 
 def resolve_model_id(name):
@@ -264,49 +261,75 @@ def scheduler_loop(logger=None):
     has been idle for IDLE_THRESHOLD seconds.
     """
     print("scheduler: started")
-    # Ensure the headless server is running at startup
     ensure_server()
     while True:
         try:
-            tasks = read_schedule()
+            _, lines, task_indices = read_schedule()
             now = datetime.now()
-            expired = [(dt, prio, model, agent, msg)
-                       for dt, prio, model, agent, msg in tasks if now >= dt]
-            pending = [(dt, prio, model, agent, msg)
-                       for dt, prio, model, agent, msg in tasks if now < dt]
 
-            if expired:
-                processed = []
-                retries = []
-                for dt, prio, model, agent, msg in expired:
-                    should_fire = (prio == 'high')
+            # Find expired task lines and decide: fire, reschedule (low), or retry (failed)
+            to_remove_indices = set()   # lines to remove from the original file
+            extra_lines = []            # lines to append (retries, reschedules)
 
-                    if not should_fire:
-                        idle_s = None
-                        if logger and hasattr(logger, 'get_idle_seconds'):
-                            idle_s = logger.get_idle_seconds()
-                        should_fire = idle_s is not None and idle_s >= IDLE_THRESHOLD
+            for idx in task_indices:
+                raw = lines[idx].strip()
+                parts = raw.split('|', 5)
+                try:
+                    dt = datetime.strptime(parts[0].strip(), '%Y/%m/%d %H:%M')
+                except ValueError:
+                    continue
+                if now < dt:
+                    continue   # not yet due
 
-                    if should_fire:
-                        if execute_task(model, agent, msg):
-                            print(f"  scheduler: task executed OK")
-                            processed.append((dt, prio, model, agent, msg))
-                        else:
-                            retry_dt = now + timedelta(minutes=5)
-                            retries.append((retry_dt, prio, model, agent, msg))
-                            print(f"  scheduler: will retry at {retry_dt.strftime('%H:%M')}")
+                prio = (parts[1].strip() if len(parts) >= 2 else 'low').lower()
+                if prio not in ('low', 'high'):
+                    prio = 'low'
+                model = parts[2].strip() if len(parts) >= 3 else ''
+                agent = parts[3].strip() if len(parts) >= 4 else ''
+                msg = parts[4].strip() if len(parts) >= 5 else ''
+
+                should_fire = (prio == 'high')
+                if not should_fire:
+                    idle_s = None
+                    if logger and hasattr(logger, 'get_idle_seconds'):
+                        idle_s = logger.get_idle_seconds()
+                    should_fire = idle_s is not None and idle_s >= IDLE_THRESHOLD
+
+                if should_fire:
+                    to_remove_indices.add(idx)
+                    if execute_task(model, agent, msg):
+                        print(f"  scheduler: task executed OK")
                     else:
-                        new_dt = (now + timedelta(seconds=IDLE_THRESHOLD)).replace(second=0, microsecond=0)
-                        pending.append((new_dt, prio, model, agent, msg))
-                        status = f"idle {idle_s:.0f}s" if idle_s is not None else "no idle info"
-                        print(f"  scheduler: busy ({status}), rescheduled to {new_dt.strftime('%H:%M')}")
+                        retry_dt = now + timedelta(minutes=5)
+                        extra_lines.append(f"{retry_dt.strftime('%Y/%m/%d %H:%M')} | {prio} | {model} | {agent} | {msg}\n")
+                        print(f"  scheduler: will retry at {retry_dt.strftime('%H:%M')}")
+                else:
+                    # Low priority — reschedule further out
+                    to_remove_indices.add(idx)  # replace with new time
+                    new_dt = (now + timedelta(seconds=IDLE_THRESHOLD)).replace(second=0, microsecond=0)
+                    extra_lines.append(f"{new_dt.strftime('%Y/%m/%d %H:%M')} | {prio} | {model} | {agent} | {msg}\n")
+                    status = f"idle {idle_s:.0f}s" if should_fire is False and idle_s is not None else "no idle info"
+                    print(f"  scheduler: busy ({status}), rescheduled to {new_dt.strftime('%H:%M')}")
 
-                # Re-read the file to capture any lines the agent may have added,
-                # then remove the ones we processed and add retries
-                current = read_schedule()
-                current = [t for t in current if t not in processed]
-                current.extend(retries)
-                write_schedule(current)
+            if to_remove_indices or extra_lines:
+                # Re-read to capture any lines the agent may have appended
+                _, new_lines, _ = read_schedule()
+                agent_added = new_lines[len(lines):] if len(new_lines) > len(lines) else []
+
+                # Build output: keep original non-expired lines + agent additions + extras
+                result = []
+                for i, line in enumerate(lines):
+                    if i not in to_remove_indices:
+                        result.append(line)
+                if result and not result[-1].endswith('\n'):
+                    result[-1] += '\n'
+                result.extend(agent_added)
+                result.extend(extra_lines)
+                out = ''.join(result)
+                if not out.endswith('\n'):
+                    out += '\n'
+                with open(SCHEDULE_FILE, 'w') as f:
+                    f.write(out)
         except Exception as e:
             print(f"scheduler: error: {e}")
 
