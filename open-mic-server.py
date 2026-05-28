@@ -157,7 +157,20 @@ def process_text(chunk):
         return
 
     if re.search(r'\b(?:enter|execute)\b', combined, re.IGNORECASE):
-        print("KEYWORD: enter/execute -> Enter")
+        print("KEYWORD: enter/execute -> send text + Enter")
+        chunk2 = re.sub(r'\bperiod\b', '.', chunk, flags=re.IGNORECASE)
+        chunk2 = re.sub(r'\bcomma\b', ',', chunk2, flags=re.IGNORECASE)
+        chunk2 = re.sub(r'\bquestion\s*mark\b', '?', chunk2, flags=re.IGNORECASE)
+        chunk2 = re.sub(r'\bexclamation\s*mark\b', '!', chunk2, flags=re.IGNORECASE)
+        chunk2 = re.sub(r'\bdash\b', '-', chunk2, flags=re.IGNORECASE)
+        chunk2 = re.sub(r'\bslash\b', '/', chunk2, flags=re.IGNORECASE)
+        chunk2 = re.sub(r'\bcolon\b', ':', chunk2, flags=re.IGNORECASE)
+        chunk2 = re.sub(r'\bsemicolon\b', ';', chunk2, flags=re.IGNORECASE)
+        chunk2 = re.sub(r' ([.,!?:;])', r'\1', chunk2)
+        to_send = f" {chunk2}"
+        print(f"SEND:{to_send}", end='')
+        send_text(to_send)
+        print(" [OK]")
         send_cdp_keys('Enter')
         clear_buffer()
         state.last_sent = ''
